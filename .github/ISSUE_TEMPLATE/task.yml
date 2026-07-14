@@ -1,0 +1,71 @@
+name: Task
+description: A single task from TASKS.md / the detailed task breakdown doc
+title: "[Task ID] Short task name"
+labels: []
+body:
+  - type: input
+    id: task-id
+    attributes:
+      label: Task ID
+      description: Must match the ID in TASKS.md, e.g. 1.3
+      placeholder: "1.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      options:
+        - "Phase 1 — Foundation & Data Pipeline"
+        - "Phase 2 — Core Substitution Engine"
+        - "Phase 3 — AI Explanation Layer (RAG)"
+        - "Phase 4 — Semantic Symptom Search"
+        - "Phase 5 — Prescription OCR"
+        - "Phase 6 — Polish, Testing & Deployment"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: primary-owner
+    attributes:
+      label: Primary Owner
+      options:
+        - "Member 1 (Backend & Data)"
+        - "Member 2 (Frontend & UI)"
+        - "Member 3 (AI/ML)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What to do
+      description: Copy the step-by-step instructions from the task breakdown doc.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tools / Libraries
+      placeholder: "e.g. pandas, rapidfuzz"
+
+  - type: textarea
+    id: depends-on
+    attributes:
+      label: Depends on (other Task IDs, if any)
+      placeholder: "e.g. depends on 1.2"
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **Reminder:** if someone other than the primary owner works on this
+        task, add them as an additional Assignee (don't remove the primary
+        owner) and leave a comment describing what was done and what's left.
+        See CONTRIBUTING.md for the full handover convention.

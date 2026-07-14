@@ -1,0 +1,27 @@
+# Environment / secrets
+.env
+*.env
+**/config/secrets*
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+build/
+.vercel/
+
+# Data (raw datasets are large — keep them out of git; add data/README.md instead)
+data/raw/*
+!data/raw/.gitkeep
+data/clean/*.csv
+!data/clean/.gitkeep
+
+# OS/editor
+.DS_Store
+.vscode/
+*.log
