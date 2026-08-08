@@ -25,3 +25,4 @@ data/clean/*.csv
 .DS_Store
 .vscode/
 *.log
+backend/staticfiles/
