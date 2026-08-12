@@ -256,10 +256,38 @@ def substitutes(request, name):
         medicine.composition_normalized
     )
 
-    jan_medicine = JanAushadhiPrices.objects.filter(
-        generic_normalized__iexact=normalized_composition
-    ).first()
+    jan_medicine = None
 
+    for jan_item in JanAushadhiPrices.objects.all():
+        jan_normalized = normalize_composition(
+            jan_item.generic_normalized
+        )
+
+        if jan_normalized == normalized_composition:
+            jan_medicine = jan_item
+            break
+    # -------------------------------------
+    # STEP 9A : Jan Aushadhi Price Comparison
+    # -------------------------------------
+
+    jan_amount_saved = None
+    jan_saving_percent = None
+
+    if (
+        jan_medicine
+        and medicine.price is not None
+        and jan_medicine.official_price is not None
+        and float(medicine.price) > 0
+    ):
+        jan_amount_saved = (
+            float(medicine.price)
+            - float(jan_medicine.official_price)
+        )
+
+        jan_saving_percent = round(
+            (jan_amount_saved / float(medicine.price)) * 100,
+            2
+        )
     # -------------------------------------
     # STEP 10 : Price Comparison
     # -------------------------------------
@@ -323,19 +351,31 @@ def substitutes(request, name):
             },
 
             "jan_aushadhi": {
-                "generic_name": (
-                    jan_medicine.generic_name
-                    if jan_medicine
-                    else None
-                ),
+    "generic_name": (
+        jan_medicine.generic_name
+        if jan_medicine
+        else None
+    ),
 
-                "official_price": (
-                    float(jan_medicine.official_price)
-                    if jan_medicine
-                    and jan_medicine.official_price is not None
-                    else None
-                ),
-            },
+    "official_price": (
+        float(jan_medicine.official_price)
+        if jan_medicine
+        and jan_medicine.official_price is not None
+        else None
+    ),
+
+    "amount_saved": (
+        round(jan_amount_saved, 2)
+        if jan_amount_saved is not None
+        else None
+    ),
+
+    "saving_percent": (
+        f"{jan_saving_percent}%"
+        if jan_saving_percent is not None
+        else None
+    ),
+},
 
             "total_substitutes": len(substitute_data),
 
