@@ -26,3 +26,6 @@ data/clean/*.csv
 .vscode/
 *.log
 backend/staticfiles/
+
+# ML vector database
+ml/chroma_db/
