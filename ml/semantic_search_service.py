@@ -1,9 +1,18 @@
 import chromadb
+
 from sentence_transformers import SentenceTransformer
+
+from pathlib import Path
 
 
 MODEL_NAME = "all-MiniLM-L6-v2"
-CHROMA_PATH = "ml/chroma_db"
+
+# Find the project root: medsub/
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Use the existing ChromaDB created by the ML pipeline
+CHROMA_PATH = str(PROJECT_ROOT / "ml" / "chroma_db")
+
 COLLECTION_NAME = "medicines_v31_test"
 
 
@@ -33,11 +42,13 @@ def semantic_search(query: str, top_k: int = 5):
 
     for i in range(len(results["ids"][0])):
 
-        search_results.append({
-            "medicine_id": results["metadatas"][0][i]["medicine_id"],
-            "medicine_name": results["metadatas"][0][i]["medicine_name"],
-            "distance": results["distances"][0][i],
-            "document": results["documents"][0][i]
-        })
+        search_results.append(
+            {
+                "medicine_id": results["metadatas"][0][i]["medicine_id"],
+                "medicine_name": results["metadatas"][0][i]["medicine_name"],
+                "distance": results["distances"][0][i],
+                "document": results["documents"][0][i]
+            }
+        )
 
     return search_results

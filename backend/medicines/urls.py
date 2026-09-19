@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import substitutes, search_medicine, health
+
+from .views import substitutes, search_medicine, health, explain_medicine
 
 urlpatterns = [
 
@@ -7,6 +8,12 @@ urlpatterns = [
         "medicine/<str:name>/substitutes/",
         substitutes,
         name="substitutes"
+    ),
+
+    path(
+        "medicine/<str:name>/explain/",
+        explain_medicine,
+        name="explain_medicine"
     ),
 
     path(

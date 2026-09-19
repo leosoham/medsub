@@ -7,8 +7,8 @@ from rest_framework.response import Response
 
 from .models import Medicine
 from .jan_models import JanAushadhiPrices
-
-
+from .rag_service import build_rag_context
+from .llm_service import generate_medicine_explanation
 # =====================================================
 # Helper Functions
 # =====================================================
@@ -16,6 +16,7 @@ from .jan_models import JanAushadhiPrices
 def normalize_composition(text):
     """
     Normalize composition string for matching.
+
     Example:
     Paracetamol500mg -> paracetamol 500 mg
     """
@@ -25,10 +26,10 @@ def normalize_composition(text):
 
     text = text.lower().strip()
 
-    # add space between number and unit
+    # Add space between number and unit
     text = re.sub(r'(\d)(mg|ml|mcg|g|iu)', r'\1 \2', text)
 
-    # remove multiple spaces
+    # Remove multiple spaces
     text = re.sub(r'\s+', ' ', text)
 
     return text
@@ -66,12 +67,12 @@ def normalize_name(text):
 
     return text.strip()
 
+
 # =====================================================
-# Medicine Substitute API
+# Reusable Substitution Logic
 # =====================================================
 
-@api_view(["GET"])
-def substitutes(request, name):
+def get_substitution_data(name, request=None):
 
     # -------------------------------------
     # STEP 1 : Clean User Input
@@ -165,19 +166,12 @@ def substitutes(request, name):
             flat=True
         ).distinct()[:5]
 
-        return Response(
-            {
-                "message": "Medicine not found.",
-                "suggestions": list(suggestions)
-            },
-            status=404
-        )
+        return None, {
+            "message": "Medicine not found.",
+            "suggestions": list(suggestions)
+        }
 
     # -------------------------------------
-    # STEP 8 : Find Substitute Medicines
-    # -------------------------------------
-
-        # -------------------------------------
     # STEP 8 : Find Substitute Medicines
     # -------------------------------------
 
@@ -195,60 +189,69 @@ def substitutes(request, name):
     # Filters
     # -------------------------------------
 
-    manufacturer = request.GET.get("manufacturer")
-    dosage_form = request.GET.get("dosage_form")
-    min_price = request.GET.get("min_price")
-    max_price = request.GET.get("max_price")
+    if request is not None:
 
-    if manufacturer:
-        substitutes = substitutes.filter(
-            manufacturer__icontains=manufacturer
-        )
+        manufacturer = request.GET.get("manufacturer")
+        dosage_form = request.GET.get("dosage_form")
+        min_price = request.GET.get("min_price")
+        max_price = request.GET.get("max_price")
 
-    if dosage_form:
-        substitutes = substitutes.filter(
-            dosage_form__iexact=dosage_form
-        )
-
-    if min_price:
-        try:
+        if manufacturer:
             substitutes = substitutes.filter(
-                price__gte=float(min_price)
+                manufacturer__icontains=manufacturer
             )
-        except ValueError:
-            pass
 
-    if max_price:
-        try:
+        if dosage_form:
             substitutes = substitutes.filter(
-                price__lte=float(max_price)
+                dosage_form__iexact=dosage_form
             )
-        except ValueError:
-            pass
 
-    # -------------------------------------
-    # Sorting
-    # -------------------------------------
+        if min_price:
+            try:
+                substitutes = substitutes.filter(
+                    price__gte=float(min_price)
+                )
+            except ValueError:
+                pass
 
-    sort = request.GET.get("sort", "price_low")
+        if max_price:
+            try:
+                substitutes = substitutes.filter(
+                    price__lte=float(max_price)
+                )
+            except ValueError:
+                pass
+
+        # -------------------------------------
+        # Sorting
+        # -------------------------------------
+
+        sort = request.GET.get("sort", "price_low")
+
+    else:
+        sort = "price_low"
 
     if sort == "price_low":
+
         substitutes = substitutes.order_by("price")
 
     elif sort == "price_high":
+
         substitutes = substitutes.order_by("-price")
 
     elif sort == "name":
+
         substitutes = substitutes.order_by("medicine_name")
 
     else:
+
         substitutes = substitutes.order_by("price")
 
     substitutes = substitutes[:10]
 
     substitute_data = []
 
-        # -------------------------------------
+    # -------------------------------------
     # STEP 9 : Find Jan Aushadhi Medicine
     # -------------------------------------
 
@@ -259,13 +262,16 @@ def substitutes(request, name):
     jan_medicine = None
 
     for jan_item in JanAushadhiPrices.objects.all():
+
         jan_normalized = normalize_composition(
             jan_item.generic_normalized
         )
 
         if jan_normalized == normalized_composition:
+
             jan_medicine = jan_item
             break
+
     # -------------------------------------
     # STEP 9A : Jan Aushadhi Price Comparison
     # -------------------------------------
@@ -279,6 +285,7 @@ def substitutes(request, name):
         and jan_medicine.official_price is not None
         and float(medicine.price) > 0
     ):
+
         jan_amount_saved = (
             float(medicine.price)
             - float(jan_medicine.official_price)
@@ -288,6 +295,7 @@ def substitutes(request, name):
             (jan_amount_saved / float(medicine.price)) * 100,
             2
         )
+
     # -------------------------------------
     # STEP 10 : Price Comparison
     # -------------------------------------
@@ -315,73 +323,109 @@ def substitutes(request, name):
                 "medicine_name": item.medicine_name,
                 "manufacturer": item.manufacturer,
                 "dosage_form": item.dosage_form,
-                "price": float(item.price)
-                if item.price is not None
-                else None,
 
-                "amount_saved": round(float(amount_saved), 2)
-                if amount_saved is not None
-                else None,
+                "price": (
+                    float(item.price)
+                    if item.price is not None
+                    else None
+                ),
 
-                "saving_percent": f"{saving_percent}%"
-                if saving_percent is not None
-                else None,
+                "amount_saved": (
+                    round(float(amount_saved), 2)
+                    if amount_saved is not None
+                    else None
+                ),
+
+                "saving_percent": (
+                    f"{saving_percent}%"
+                    if saving_percent is not None
+                    else None
+                ),
 
                 "uses": item.uses,
                 "side_effects": item.side_effects,
             }
         )
 
-            # -------------------------------------
-    # STEP 11 : Final Response
+    # -------------------------------------
+    # Final reusable result
     # -------------------------------------
 
-    return Response(
-        {
-            "searched_medicine": {
-                "medicine_name": medicine.medicine_name,
-                "manufacturer": medicine.manufacturer,
-                "dosage_form": medicine.dosage_form,
-                "price": float(medicine.price)
+    result = {
+        "searched_medicine": {
+            "medicine_name": medicine.medicine_name,
+            "manufacturer": medicine.manufacturer,
+            "dosage_form": medicine.dosage_form,
+
+            "price": (
+                float(medicine.price)
                 if medicine.price is not None
-                else None,
-                "composition": medicine.composition_normalized,
-                "uses": medicine.uses,
-                "side_effects": medicine.side_effects,
-            },
+                else None
+            ),
 
-            "jan_aushadhi": {
-    "generic_name": (
-        jan_medicine.generic_name
-        if jan_medicine
-        else None
-    ),
+            "composition": medicine.composition_normalized,
+            "uses": medicine.uses,
+            "side_effects": medicine.side_effects,
+        },
 
-    "official_price": (
-        float(jan_medicine.official_price)
-        if jan_medicine
-        and jan_medicine.official_price is not None
-        else None
-    ),
+        "jan_aushadhi": {
+            "generic_name": (
+                jan_medicine.generic_name
+                if jan_medicine
+                else None
+            ),
 
-    "amount_saved": (
-        round(jan_amount_saved, 2)
-        if jan_amount_saved is not None
-        else None
-    ),
+            "official_price": (
+                float(jan_medicine.official_price)
+                if (
+                    jan_medicine
+                    and jan_medicine.official_price is not None
+                )
+                else None
+            ),
 
-    "saving_percent": (
-        f"{jan_saving_percent}%"
-        if jan_saving_percent is not None
-        else None
-    ),
-},
+            "amount_saved": (
+                round(jan_amount_saved, 2)
+                if jan_amount_saved is not None
+                else None
+            ),
 
-            "total_substitutes": len(substitute_data),
+            "saving_percent": (
+                f"{jan_saving_percent}%"
+                if jan_saving_percent is not None
+                else None
+            ),
+        },
 
-            "substitutes": substitute_data,
-        }
+        "total_substitutes": len(substitute_data),
+
+        "substitutes": substitute_data,
+    }
+
+    return result, None
+
+
+# =====================================================
+# Medicine Substitute API
+# =====================================================
+
+@api_view(["GET"])
+def substitutes(request, name):
+
+    result, error = get_substitution_data(
+        name,
+        request
     )
+
+    if error:
+
+        return Response(
+            error,
+            status=404
+        )
+
+    return Response(result)
+
 
 # =====================================================
 # Search API
@@ -406,9 +450,9 @@ def search_medicine(request):
 
     seen = set()
 
-    # -------------------------------
+    # -------------------------------------
     # Exact / Contains Search
-    # -------------------------------
+    # -------------------------------------
 
     exact_matches = Medicine.objects.filter(
         medicine_name__icontains=query
@@ -418,22 +462,27 @@ def search_medicine(request):
 
         if medicine.medicine_name not in seen:
 
-            results.append({
-                "medicine_name": medicine.medicine_name
-            })
+            results.append(
+                {
+                    "medicine_name": medicine.medicine_name
+                }
+            )
 
             seen.add(medicine.medicine_name)
 
-    # -------------------------------
+    # -------------------------------------
     # Fuzzy Search
-    # -------------------------------
+    # -------------------------------------
 
     if len(results) < 10:
 
         choices = {}
 
         for item in medicines:
-            choices[normalize_name(item.name_normalized)] = item
+
+            choices[
+                normalize_name(item.name_normalized)
+            ] = item
 
         matches = process.extract(
             normalized_query,
@@ -451,13 +500,20 @@ def search_medicine(request):
 
                 if medicine.medicine_name not in seen:
 
-                    results.append({
-                        "medicine_name": medicine.medicine_name
-                    })
+                    results.append(
+                        {
+                            "medicine_name": medicine.medicine_name
+                        }
+                    )
 
                     seen.add(medicine.medicine_name)
 
     return Response(results[:10])
+
+
+# =====================================================
+# Health API
+# =====================================================
 
 @api_view(["GET"])
 def health(request):
@@ -466,5 +522,71 @@ def health(request):
         {
             "status": "ok",
             "message": "Medicine Substitute API is running."
+        }
+    )
+
+
+# =====================================================
+# RAG Explanation API
+# =====================================================
+
+@api_view(["GET"])
+def explain_medicine(request, name):
+
+    # -------------------------------------
+    # STEP 1 : Get substitution information
+    # -------------------------------------
+
+    substitution_data, error = get_substitution_data(
+        name,
+        request
+    )
+
+    if error:
+
+        return Response(
+            error,
+            status=404
+        )
+
+    # -------------------------------------
+    # STEP 2 : Build RAG context
+    # -------------------------------------
+
+    rag_context = build_rag_context(
+        substitution_data
+    )
+
+    # -------------------------------------
+    # STEP 3 : Generate LLM explanation
+    # -------------------------------------
+
+    explanation = generate_medicine_explanation(
+        rag_context
+    )
+
+    # -------------------------------------
+    # STEP 4 : Final response
+    # -------------------------------------
+
+    return Response(
+        {
+            "medicine_name": name,
+
+            "explanation": explanation,
+
+            "substitution_data": {
+                "searched_medicine": substitution_data.get(
+                    "searched_medicine"
+                ),
+
+                "jan_aushadhi": substitution_data.get(
+                    "jan_aushadhi"
+                ),
+
+                "total_substitutes": substitution_data.get(
+                    "total_substitutes"
+                )
+            }
         }
     )
