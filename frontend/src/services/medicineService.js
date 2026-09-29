@@ -153,3 +153,18 @@ export function createMedicineId(medicineName) {
 export function getMedicineNameFromId(id) {
   return decodeURIComponent(id)
 }
+
+export async function getMedicineExplanation(medicineName) {
+  if (!medicineName) {
+    throw new Error('Medicine name is required')
+  }
+
+  const response = await api.get(
+    `/medicine/${encodeURIComponent(medicineName)}/explain/`,
+    {
+      timeout: 10000,
+    },
+  )
+
+  return response.data
+}
