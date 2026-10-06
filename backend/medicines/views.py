@@ -9,6 +9,8 @@ from .models import Medicine
 from .jan_models import JanAushadhiPrices
 from .rag_service import build_rag_context
 from .llm_service import generate_medicine_explanation
+
+from ml.semantic_search_service import semantic_search
 # =====================================================
 # Helper Functions
 # =====================================================
@@ -464,7 +466,9 @@ def search_medicine(request):
 
             results.append(
                 {
-                    "medicine_name": medicine.medicine_name
+                    "id": medicine.id,
+                    "medicine_name": medicine.medicine_name,
+                    "manufacturer": medicine.manufacturer,
                 }
             )
 
@@ -502,7 +506,10 @@ def search_medicine(request):
 
                     results.append(
                         {
-                            "medicine_name": medicine.medicine_name
+                            "id": medicine.id,
+                            "medicine_name": medicine.medicine_name,
+                            "manufacturer": medicine.manufacturer,
+
                         }
                     )
 
@@ -590,3 +597,65 @@ def explain_medicine(request, name):
             }
         }
     )
+
+# =====================================================
+# Symptom Search API
+# =====================================================
+
+@api_view(["GET"])
+def symptom_search(request):
+    query = request.GET.get("q", "").strip()
+
+    if not query:
+        return Response(
+            {"message": "Please provide a symptom query."},
+            status=400,
+        )
+
+    # Step 1: Perform semantic search using ChromaDB
+    search_results = semantic_search(query, top_k=10)
+
+    if not search_results:
+        return Response([])
+
+    # Step 2: Collect medicine IDs returned by ChromaDB
+    medicine_ids = [
+        result["medicine_id"]
+        for result in search_results
+    ]
+
+    # Step 3: Retrieve matching medicines from PostgreSQL
+    medicines = Medicine.objects.filter(id__in=medicine_ids)
+
+    medicine_lookup = {
+        medicine.id: medicine
+        for medicine in medicines
+    }
+
+    # Step 4: Preserve ChromaDB similarity ranking
+    results = []
+
+    for result in search_results:
+        medicine = medicine_lookup.get(result["medicine_id"])
+
+        if medicine is None:
+            continue
+
+        results.append(
+            {
+                "id": medicine.id,
+                "medicine_name": medicine.medicine_name,
+                "manufacturer": medicine.manufacturer,
+                "dosage_form": medicine.dosage_form,
+                "price": (
+                    float(medicine.price)
+                    if medicine.price is not None
+                    else None
+                ),
+                "uses": medicine.uses,
+                "side_effects": medicine.side_effects,
+                "distance": result["distance"],
+            }
+        )
+
+    return Response(results)
