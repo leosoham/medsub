@@ -7,7 +7,10 @@ import {
   Stethoscope,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import {
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom'
 
 import MedicineCard from '../components/MedicineCard'
 import JanAushadhiCard from '../components/JanAushadhiCard'
@@ -17,6 +20,8 @@ import SpotlightSearch from '../components/SpotlightSearch'
 import {
   getMedicineSubstitutes,
   normalizeSubstitutionResponse,
+  searchMedicinesBySymptoms,
+  normalizeSymptomResult,
 } from '../services/medicineService'
 
 const symptoms = [
@@ -35,6 +40,10 @@ export default function Search({
 
   const query = params.get('q') || ''
 
+  const navigate = useNavigate()
+
+  const [symptomQuery, setSymptomQuery] = useState(query)
+
   const [view, setView] = useState('grid')
   const [selected, setSelected] = useState([])
 
@@ -50,8 +59,9 @@ export default function Search({
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
-    if (!query || symptomMode) {
+    if (!query) {
       setData(null)
+      setLoading(false)
       return
     }
 
@@ -61,11 +71,25 @@ export default function Search({
       try {
         setLoading(true)
         setError('')
-
-        // Clear the previous medicine immediately.
-        // This prevents stale medicine information
-        // from remaining visible while the new request loads.
         setData(null)
+
+        if (symptomMode) {
+          const response =
+            await searchMedicinesBySymptoms(query)
+
+          if (!cancelled) {
+            setData({
+              substitutes: response.map(
+                normalizeSymptomResult,
+              ),
+              searchedMedicine: null,
+              janAushadhi: null,
+              totalSubstitutes: response.length,
+            })
+          }
+
+          return
+        }
 
         const response =
           await getMedicineSubstitutes(
@@ -86,13 +110,18 @@ export default function Search({
       } catch (err) {
         if (!cancelled) {
           console.error(
-            'Failed to load medicine results:',
+            symptomMode
+              ? 'Failed to search symptoms:'
+              : 'Failed to load medicine results:',
             err,
           )
 
           setData(null)
+
           setError(
-            'We could not load medicine options right now.',
+            symptomMode
+              ? 'We could not find medicines for those symptoms right now.'
+              : 'We could not load medicine options right now.',
           )
         }
       } finally {
@@ -126,6 +155,20 @@ export default function Search({
     )
   }
 
+  const submitSymptomSearch = event => {
+    event.preventDefault()
+
+    const trimmedQuery = symptomQuery.trim()
+
+    if (!trimmedQuery) {
+      return
+    }
+
+    navigate(
+      `/symptoms?q=${encodeURIComponent(trimmedQuery)}`,
+    )
+  }
+
   const searchedMedicine =
     data?.searchedMedicine
 
@@ -155,6 +198,24 @@ export default function Search({
         </p>
       </section>
 
+      <div className="search-mode-switch">
+  <button
+    type="button"
+    className={!symptomMode ? 'active' : ''}
+    onClick={() => navigate('/search')}
+  >
+    Search by medicine name
+  </button>
+
+  <button
+    type="button"
+    className={symptomMode ? 'active' : ''}
+    onClick={() => navigate('/symptoms')}
+  >
+    Describe your symptoms
+  </button>
+</div>
+
       {!symptomMode && (
         <SpotlightSearch
           compact
@@ -162,18 +223,46 @@ export default function Search({
         />
       )}
 
-      {symptomMode && (
-        <div className="symptom-picker">
-          {symptoms.map(symptom => (
-            <button
-              key={symptom}
-              type="button"
-            >
-              {symptom}
-            </button>
-          ))}
-        </div>
-      )}
+{symptomMode && (
+  <div className="symptom-search-area">
+    <form
+      className="symptom-search-form"
+      onSubmit={submitSymptomSearch}
+    >
+      <Stethoscope size={20} />
+
+      <input
+        value={symptomQuery}
+        onChange={event =>
+          setSymptomQuery(event.target.value)
+        }
+        placeholder="Describe your symptoms, e.g. fever and headache"
+        aria-label="Describe your symptoms"
+      />
+
+      <button type="submit">
+        Search
+      </button>
+    </form>
+
+    <div className="symptom-picker">
+      {symptoms.map(symptom => (
+        <button
+          key={symptom}
+          type="button"
+          onClick={() => {
+            setSymptomQuery(symptom)
+            navigate(
+              `/symptoms?q=${encodeURIComponent(symptom)}`,
+            )
+          }}
+        >
+          {symptom}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
       {query && searchedMedicine && (
         <section className="searched-medicine-summary">
