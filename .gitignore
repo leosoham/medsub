@@ -29,3 +29,7 @@ backend/staticfiles/
 
 # ML vector database
 ml/chroma_db/
+
+# Temporary prescription PDF testing files
+/sample_prescription.pdf
+/test_prescription_pdf.py

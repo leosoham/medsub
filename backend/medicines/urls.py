@@ -7,6 +7,8 @@ from .views import (
     health,
     explain_medicine,
     symptom_search,
+    prescription_upload,
+    prescription_confirm,
 )
 
 urlpatterns = [
@@ -34,5 +36,15 @@ urlpatterns = [
         "symptom-search/",
         symptom_search,
         name="symptom_search",
+    ),
+    path(
+        "prescription-upload/",
+        prescription_upload,
+        name="prescription_upload",
+    ),
+    path(
+        "prescription-confirm/",
+        prescription_confirm,
+        name="prescription_confirm",
     ),
 ]

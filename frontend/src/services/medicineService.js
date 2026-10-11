@@ -212,3 +212,39 @@ export async function getMedicineExplanation(medicineName) {
 
   return response.data
 }
+
+
+export async function uploadPrescription(file) {
+  if (!file) {
+    throw new Error('Please select a prescription PDF')
+  }
+
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('Please upload a PDF file')
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('PDF must be 10 MB or smaller')
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await api.post('/prescription-upload/', formData, {
+    timeout: 60000,
+  })
+
+  return response.data
+}
+
+export async function confirmPrescriptionMedicine(medicineId) {
+  if (!Number.isInteger(Number(medicineId)) || Number(medicineId) <= 0) {
+    throw new Error('Please select a valid medicine')
+  }
+
+  const response = await api.post('/prescription-confirm/', {
+    medicine_id: Number(medicineId),
+  })
+
+  return response.data
+}
