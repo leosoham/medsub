@@ -329,3 +329,161 @@
   .ai-retry:active {
     transform: scale(0.98);
   }
+
+
+/* Medicine comparison page */
+.compare-page {
+  padding-top: 47px;
+  padding-bottom: 120px;
+}
+
+.compare-heading {
+  max-width: 700px;
+  margin: 34px 0;
+}
+
+.compare-heading .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.compare-heading h1 {
+  margin: 15px 0 10px;
+  font-size: 43px;
+  letter-spacing: -0.06em;
+}
+
+.compare-heading > p {
+  max-width: 570px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.comparison-column {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+}
+
+.comparison-medicine-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 20px;
+  text-align: center;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--med-color) 17%, var(--paper)),
+    var(--paper)
+  );
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-medicine-hero .medicine-capsule {
+  margin-bottom: 20px;
+}
+
+.comparison-medicine-hero h2 {
+  margin: 12px 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+
+.comparison-medicine-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.comparison-price {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-price span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.comparison-price strong {
+  font-size: 29px;
+  letter-spacing: -0.06em;
+}
+
+.comparison-row {
+  padding: 17px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-row > span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.comparison-row p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.comparison-details-link {
+  margin: 18px 22px 22px;
+}
+
+@media (max-width: 680px) {
+  .compare-page {
+    padding-top: 30px;
+    padding-bottom: 90px;
+  }
+
+  .compare-heading {
+    margin: 28px 0;
+  }
+
+  .compare-heading h1 {
+    font-size: 36px;
+  }
+
+  .comparison-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .comparison-medicine-hero {
+    padding: 24px 18px;
+  }
+
+  .comparison-price {
+    padding: 18px;
+  }
+
+  .comparison-row {
+    padding: 15px 18px;
+  }
+
+  .comparison-details-link {
+    margin: 16px 18px 18px;
+  }
+}

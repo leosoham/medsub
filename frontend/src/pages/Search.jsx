@@ -16,6 +16,7 @@ import MedicineCard from '../components/MedicineCard'
 import JanAushadhiCard from '../components/JanAushadhiCard'
 import PageTransition from '../components/PageTransition'
 import SpotlightSearch from '../components/SpotlightSearch'
+import { useComparison } from '../context/ComparisonContext'
 
 import {
   getMedicineSubstitutes,
@@ -45,7 +46,11 @@ export default function Search({
   const [symptomQuery, setSymptomQuery] = useState(query)
 
   const [view, setView] = useState('grid')
-  const [selected, setSelected] = useState([])
+
+const {
+  selectedMedicines: selected,
+  toggleMedicine: toggle,
+} = useComparison()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -145,15 +150,6 @@ export default function Search({
     maxPrice,
   ])
 
-  const results = data?.substitutes ?? []
-
-  const toggle = medicine => {
-    setSelected(current =>
-      current.some(item => item.id === medicine.id)
-        ? current.filter(item => item.id !== medicine.id)
-        : [...current, medicine].slice(-3),
-    )
-  }
 
   const submitSymptomSearch = event => {
     event.preventDefault()
@@ -548,9 +544,17 @@ export default function Search({
               selected
             </span>
 
-            <button type="button">
-              Compare now
-            </button>
+            <button
+  type="button"
+  disabled={selected.length !== 2}
+  onClick={() =>
+    navigate('/compare', {
+      state: { medicines: selected },
+    })
+  }
+>
+  Compare now
+</button>
           </motion.div>
         )}
       </AnimatePresence>

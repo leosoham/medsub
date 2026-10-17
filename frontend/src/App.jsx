@@ -8,22 +8,30 @@ import UploadPrescription from './pages/UploadPrescription'
 import About from './pages/About'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import Compare from './pages/Compare'
+import { ComparisonProvider } from './context/ComparisonContext'
+
 
 export default function App() {
   const location = useLocation()
-  return <AnimatePresence mode="wait">
-    <Routes location={location} key={location.pathname}>
-      <Route element={<RootLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/symptoms" element={<Search symptomMode />} />
-        <Route path="/upload" element={<UploadPrescription />} />
-        <Route path="/medicine/:id" element={<MedicineDetail />} />
-        <Route path="/compare" element={<Search compareMode />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
-  </AnimatePresence>
+
+  return (
+    <ComparisonProvider>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          <Route element={<RootLayout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/symptoms" element={<Search symptomMode />} />
+            <Route path="/upload" element={<UploadPrescription />} />
+            <Route path="/medicine/:id" element={<MedicineDetail />} />
+            <Route path="/compare" element={<Compare />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </AnimatePresence>
+    </ComparisonProvider>
+  )
 }
