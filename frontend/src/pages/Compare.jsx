@@ -23,7 +23,7 @@ import {
     return value || 'Information unavailable'
   }
   
-  function MedicineComparison({ data }) {
+  function MedicineComparison({ data, onRemove }) {
     const medicine = data.searchedMedicine
     const janAushadhi = data.janAushadhi
   
@@ -94,12 +94,22 @@ import {
         >
           View full details
         </Link>
+        <button
+  className="button button-outline small"
+  type="button"
+  onClick={onRemove}
+>
+  Remove from comparison
+</button>
       </section>
     )
   }
   
   export default function Compare() {
-    const { selectedMedicines: medicines } = useComparison()
+    const {
+      selectedMedicines: medicines,
+      toggleMedicine,
+    } = useComparison()
     const [comparisonData, setComparisonData] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
@@ -166,9 +176,9 @@ import {
             <GitCompareArrows size={31} />
             <h2>Select two medicines to compare</h2>
             <p>
-              Return to search, select two medicines,
-              and choose Compare now.
-            </p>
+  Return to search to select two medicines.
+  Your remaining selection will be preserved.
+</p>
           </div>
         </PageTransition>
       )
@@ -220,11 +230,12 @@ import {
           comparisonData.length === 2 && (
             <div className="comparison-grid">
               {comparisonData.map((data, index) => (
-                <MedicineComparison
-                  key={medicines[index].id}
-                  data={data}
-                />
-              ))}
+  <MedicineComparison
+    key={medicines[index].id}
+    data={data}
+    onRemove={() => toggleMedicine(medicines[index])}
+  />
+))}
             </div>
           )}
       </PageTransition>
