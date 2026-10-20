@@ -168,6 +168,8 @@ const {
   const searchedMedicine =
     data?.searchedMedicine
 
+const results = data?.substitutes ?? []
+
   return (
     <PageTransition className="search-page page-width">
       <section className="search-header">
