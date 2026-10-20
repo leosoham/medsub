@@ -1,5 +1,5 @@
-
 import re
+from functools import lru_cache
 
 import pymupdf
 from rapidfuzz import fuzz, process
@@ -76,9 +76,8 @@ def extract_pdf_text(pdf_file):
     Extract selectable text from an uploaded PDF.
 
     Raises ValueError for invalid, oversized, empty, or encrypted PDFs.
-    This function does not perform OCR on scanned/image-only PDFs.
+    Scanned/image-only PDFs are not processed using OCR.
     """
-
     if pdf_file is None:
         raise ValueError("Please upload a prescription PDF.")
 
@@ -96,7 +95,11 @@ def extract_pdf_text(pdf_file):
         raise ValueError("The uploaded PDF is empty.")
 
     try:
-        with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
+        with pymupdf.open(
+            stream=pdf_bytes,
+            filetype="pdf",
+        ) as document:
+
             if document.is_encrypted:
                 raise ValueError(
                     "Password-protected PDFs are not supported."
@@ -114,6 +117,7 @@ def extract_pdf_text(pdf_file):
 
     except ValueError:
         raise
+
     except Exception as exc:
         raise ValueError(
             "The PDF could not be read. Please upload a valid PDF."
@@ -126,6 +130,7 @@ def _normalize_text(value):
     value = (value or "").lower()
     value = value.replace("μg", "mcg").replace("µg", "mcg")
     value = re.sub(r"[^a-z0-9.%]+", " ", value)
+
     return " ".join(value.split())
 
 
@@ -136,101 +141,112 @@ def _extract_strengths(value):
 
     for number, unit in STRENGTH_PATTERN.findall(value or ""):
         unit = unit.lower()
+        numeric_value = float(number)
 
         if unit == "g":
-            number = str(float(number) * 1000)
+            numeric_value *= 1000
             unit = "mg"
 
-        elif unit == "mcg":
-            unit = "mcg"
-
-        elif unit == "ml":
-            unit = "ml"
-
-        elif unit == "iu":
-            unit = "iu"
-
-        elif unit == "%":
-            unit = "%"
-
-        strengths.append((float(number), unit))
+        strengths.append((numeric_value, unit))
 
     return strengths
 
 
+
+
 def _clean_prescription_lines(extracted_text):
-    """Remove common prescription headings and patient metadata."""
+    """Pair medicine names with their strength/form lines."""
+
+    raw_lines = [
+        line.strip()
+        for line in extracted_text.splitlines()
+        if line.strip()
+    ]
 
     lines = []
+    seen = set()
+    i = 0
 
-    for raw_line in extracted_text.splitlines():
-        line = raw_line.strip()
-
-        if not line:
-            continue
-
-        # Remove list numbering such as "1." or "2)".
-        line = re.sub(r"^\s*\d+[\.\)]\s*", "", line).strip()
-
-        if not line:
-            continue
+    while i < len(raw_lines):
+        line = re.sub(
+            r"^\s*\d+[\.\)]\s*", "", raw_lines[i]
+        ).strip()
 
         lowered = line.lower()
 
-        if lowered in HEADING_LINES:
-            continue
-
-        if any(
-            keyword in lowered
-            for keyword in NON_MEDICINE_KEYWORDS
-        ):
-            continue
-
-        if lowered.startswith(
-            (
-                "patient ",
-                "doctor ",
-                "date ",
-                "age ",
-                "gender ",
-                "address ",
-                "hospital ",
-                "clinic ",
-                "signature ",
+        # Skip headings and common metadata.
+        if (
+            lowered in HEADING_LINES
+            or any(
+                keyword in lowered
+                for keyword in NON_MEDICINE_KEYWORDS
             )
+            or lowered.startswith((
+                "patient ", "name:", "age:", "patient id:",
+                "date ", "date:", "gender ", "address ",
+                "hospital ", "clinic ", "signature ",
+                "document type", "demo id", "issued",
+                "allergies", "weight", "contact",
+                "reason for visit", "relevant history",
+                "diagnosis", "medicine text", "test directions",
+                "parsing target", "expected extraction",
+                "text present", "purpose", "page ",
+                "genericx", "demo document", "demo only",
+                "fictional test document", "test note:",
+            ))
         ):
+            i += 1
             continue
 
+        # A strength/form line may follow the medicine name.
+        if (
+            STRENGTH_PATTERN.search(line)
+            and re.search(r"[a-zA-Z]", line)
+        ):
+            # Skip strength-only cells such as "500 mg tablet".
+            i += 1
+            continue
+
+        # Treat a line without a strength as a possible medicine name.
         if not re.search(r"[a-zA-Z]", line):
+            i += 1
             continue
 
-        lines.append(line)
+        # Combine this line with the next line if it contains a strength.
+        if i + 1 < len(raw_lines):
+            next_line = raw_lines[i + 1].strip()
+
+            if (
+                STRENGTH_PATTERN.search(next_line)
+                and re.search(r"[a-zA-Z]", next_line)
+            ):
+                candidate = f"{line} {next_line}"
+                normalized = _normalize_text(candidate)
+
+                if normalized not in seen:
+                    seen.add(normalized)
+                    lines.append(candidate)
+
+                i += 2
+                continue
+
+        i += 1
 
     return lines
 
 
-def extract_medicine_candidates(extracted_text, limit=5):
+@lru_cache(maxsize=1)
+def _get_medicine_index():
     """
-    Find possible database matches for each prescription line.
+    Load medicine records and precompute searchable fields once per process.
 
-    This function only retrieves candidates. It does not establish
-    therapeutic equivalence or recommend a medicine for self-treatment.
-    All results require confirmation.
+    The index remains cached until the cache is cleared or Django restarts.
     """
-
-    if not extracted_text or not extracted_text.strip():
-        return []
-
-    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
-        raise ValueError("limit must be a positive integer.")
-
-    lines = _clean_prescription_lines(extracted_text)
-
-    if not lines:
-        return []
 
     medicine_rows = list(
-        Medicine.objects.exclude(medicine_name__isnull=True)
+        Medicine.objects.exclude(
+            medicine_name__isnull=True
+        )
         .exclude(medicine_name="")
         .values(
             "id",
@@ -242,17 +258,68 @@ def extract_medicine_candidates(extracted_text, limit=5):
         )
     )
 
-    if not medicine_rows:
-        return []
-
-    # Build a normalized name index while preserving each database row.
-    medicine_names = []
+    indexed_rows = []
     normalized_names = []
 
     for medicine in medicine_rows:
         name = medicine["medicine_name"] or ""
-        medicine_names.append(name)
-        normalized_names.append(_normalize_text(name))
+        composition = medicine.get("composition") or ""
+
+        normalized_name = _normalize_text(name)
+
+        indexed_rows.append(
+            {
+                **medicine,
+                "_normalized_name": normalized_name,
+                "_normalized_composition": _normalize_text(
+                    composition
+                ),
+                "_name_strengths": _extract_strengths(name),
+            }
+        )
+
+        normalized_names.append(normalized_name)
+
+    return indexed_rows, normalized_names
+
+
+def clear_medicine_index_cache():
+    """
+    Clear the cached medicine index after medicine data changes.
+    """
+
+    _get_medicine_index.cache_clear()
+
+
+def extract_medicine_candidates(extracted_text, limit=5):
+    """
+    Find possible database matches for each prescription line.
+
+    This function retrieves candidates only. It does not establish
+    therapeutic equivalence or recommend treatment.
+
+    All results require confirmation.
+    """
+
+    if not extracted_text or not extracted_text.strip():
+        return []
+
+    if (
+        not isinstance(limit, int)
+        or isinstance(limit, bool)
+        or limit < 1
+    ):
+        raise ValueError("limit must be a positive integer.")
+
+    lines = _clean_prescription_lines(extracted_text)
+
+    if not lines:
+        return []
+
+    medicine_rows, normalized_names = _get_medicine_index()
+
+    if not medicine_rows:
+        return []
 
     results = []
 
@@ -260,22 +327,40 @@ def extract_medicine_candidates(extracted_text, limit=5):
         requested_normalized = _normalize_text(line)
         requested_strengths = _extract_strengths(line)
 
-        # Exclude dosage instructions and strengths from the ingredient
-        # tokens used for the initial conservative comparison.
+        # Remove dosage instructions and strengths from meaningful tokens.
         requested_tokens = set(requested_normalized.split())
+
         requested_tokens -= DOSAGE_FORM_WORDS
+
         requested_tokens -= {
-            "mg", "mcg", "g", "ml", "iu", "percent",
-            "once", "twice", "daily", "nightly", "morning",
-            "evening", "before", "after", "food", "days",
-            "day", "week", "weeks",
+            "mg",
+            "mcg",
+            "g",
+            "ml",
+            "iu",
+            "percent",
+            "once",
+            "twice",
+            "daily",
+            "nightly",
+            "morning",
+            "evening",
+            "before",
+            "after",
+            "food",
+            "days",
+            "day",
+            "week",
+            "weeks",
         }
+
         requested_tokens = {
-            token for token in requested_tokens
+            token
+            for token in requested_tokens
             if not token.isdigit() and len(token) >= 3
         }
 
-        # Fuzzy retrieval generates candidates, not proof of equivalence.
+        # Fuzzy retrieval creates candidates, not proof of equivalence.
         matches = process.extract(
             requested_normalized,
             normalized_names,
@@ -295,22 +380,26 @@ def extract_medicine_candidates(extracted_text, limit=5):
 
             name = medicine["medicine_name"] or ""
             composition = medicine.get("composition") or ""
-            normalized_name = normalized_names[index]
 
-            normalized_composition = _normalize_text(composition)
-            candidate_text = f" {normalized_name} {normalized_composition} "
+            normalized_name = medicine["_normalized_name"]
+            normalized_composition = medicine[
+                "_normalized_composition"
+            ]
 
-            # Require at least one meaningful requested token to appear
-            # as a complete token in the candidate name/composition.
+            candidate_text = (
+                f" {normalized_name} {normalized_composition} "
+            )
+
+            # Require a meaningful requested token in the candidate.
             if requested_tokens and not any(
                 f" {token} " in candidate_text
                 for token in requested_tokens
             ):
                 continue
 
-            # If the prescription states a strength, reject a candidate
-            # when its name explicitly states a different strength.
-            candidate_name_strengths = _extract_strengths(name)
+            # Reject explicitly different strengths when both sides
+            # contain strength information.
+            candidate_name_strengths = medicine["_name_strengths"]
 
             if requested_strengths and candidate_name_strengths:
                 if not any(
@@ -319,21 +408,21 @@ def extract_medicine_candidates(extracted_text, limit=5):
                 ):
                     continue
 
-            # A name match alone is not enough when composition data
-            # is available and clearly contradicts the requested token.
+            # Preserve the original conservative contradiction check.
             if requested_tokens and normalized_composition:
                 composition_tokens = set(
                     normalized_composition.split()
                 )
 
-                # If the composition identifies ingredients but none
-                # matches the requested tokens, reject the candidate
-                # only when the candidate name also lacks a match.
                 name_tokens = set(normalized_name.split())
 
                 if (
-                    not requested_tokens.intersection(composition_tokens)
-                    and not requested_tokens.intersection(name_tokens)
+                    not requested_tokens.intersection(
+                        composition_tokens
+                    )
+                    and not requested_tokens.intersection(
+                        name_tokens
+                    )
                 ):
                     continue
 
